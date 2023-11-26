@@ -142,8 +142,9 @@ val_loader = DataLoader(
 )
 
 ## Loading the model to run
+
 model = timm.create_model(
-    "tf_efficientnet_b0", pretrained=True, num_classes=config.n_classes
+    config.base_model, pretrained=True, num_classes=config.n_classes
 )
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
@@ -171,5 +172,5 @@ for epoch in range(0, config.epochs):
     )
     val_metrics = evaluate(val_loader, model, criterion, epoch, train_metrics, start)
     ## Saving the model
-    filename = "Knife-Effb0-E" + str(epoch + 1) + ".pt"
+    filename = f"Knife-{config.base_model}-E" + str(epoch + 1) + ".pt"
     torch.save(model.state_dict(), filename)

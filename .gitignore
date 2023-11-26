@@ -1,6 +1,6 @@
 dataset/*
 logs/*
-Knife-Effb0-E*
+Knife-*-E*.pt
 .vscode
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,windows,linux,jupyternotebooks
