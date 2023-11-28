@@ -1,13 +1,14 @@
-from utils import *
-from config import *
+import cv2
 from torch.utils.data import Dataset
 from torchvision import transforms as T
-import cv2
+
+from utils import *
 
 
 # create dataset class
 class knifeDataset(Dataset):
-    def __init__(self, images_df, mode="train"):
+    def __init__(self, images_df, config, mode="train"):
+        self.config = config
         self.images_df = images_df.copy()
         self.images_df.Id = self.images_df.Id
         self.mode = mode
@@ -25,7 +26,7 @@ class knifeDataset(Dataset):
             X = T.Compose(
                 [
                     T.ToPILImage(),
-                    T.Resize((config.img_weight, config.img_height)),
+                    T.Resize((self.config.img_weight, self.config.img_height)),
                     T.ColorJitter(brightness=0.2, contrast=0, saturation=0, hue=0),
                     T.RandomRotation(degrees=(0, 180)),
                     T.RandomVerticalFlip(p=0.5),
@@ -38,7 +39,7 @@ class knifeDataset(Dataset):
             X = T.Compose(
                 [
                     T.ToPILImage(),
-                    T.Resize((config.img_weight, config.img_height)),
+                    T.Resize((self.config.img_weight, self.config.img_height)),
                     T.ToTensor(),
                     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ]

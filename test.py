@@ -49,13 +49,7 @@ def map_accuracy(probs, truth, k=5):
             correct[0],
             correct[0] + correct[1] + correct[2] + correct[3] + correct[4],
         ]
-        map5 = (
-            correct[0] / 1
-            + correct[1] / 2
-            + correct[2] / 3
-            + correct[3] / 4
-            + correct[4] / 5
-        )
+        map5 = correct[0] / 1 + correct[1] / 2 + correct[2] / 3 + correct[3] / 4 + correct[4] / 5
         acc1 = accs[0]
         acc5 = accs[1]
         return map5, acc1, acc5
@@ -67,14 +61,10 @@ print("reading test file")
 test_files = pd.read_csv("dataset/test.csv")
 print("Creating test dataloader")
 test_gen = knifeDataset(test_files, mode="val")
-test_loader = DataLoader(
-    test_gen, batch_size=64, shuffle=False, pin_memory=True, num_workers=8
-)
+test_loader = DataLoader(test_gen, batch_size=64, shuffle=False, pin_memory=True, num_workers=8)
 
 print("loading trained model")
-model = timm.create_model(
-    config.base_model, pretrained=True, num_classes=config.n_classes
-)
+model = timm.create_model(config.base_model, pretrained=True, num_classes=config.n_classes)
 model.load_state_dict(torch.load("Knife-vgg16_bn-E9.pt"))
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
