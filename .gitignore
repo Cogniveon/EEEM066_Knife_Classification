@@ -1,5 +1,6 @@
 dataset/*
 logs/*
+results/*
 Knife-*-E*.pt
 .vscode
 

@@ -1,7 +1,8 @@
 import cv2
 import timm
 import torch
-from torchvision import transforms
+from torchvision import models, transforms
+from torchvision.models.densenet import DenseNet121_Weights
 
 from config import default as config
 
@@ -27,8 +28,9 @@ def preprocess_frame(frame):
 capture = cv2.VideoCapture(0)
 
 
-model = timm.create_model(config.base_model, pretrained=True, num_classes=config.n_classes)
-model.load_state_dict(torch.load(f"Knife-{config.base_model}-E9.pt"))
+# model = timm.create_model(config.base_model, pretrained=True, num_classes=config.n_classes)
+model = models.densenet121(weights=DenseNet121_Weights.IMAGENET1K_V1)
+model.load_state_dict(torch.load(f"./results/densenet121/2023-11-29 10:33:31/Knife-densenet121-E20.pt"))
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()

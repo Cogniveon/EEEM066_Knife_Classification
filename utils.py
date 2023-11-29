@@ -124,6 +124,14 @@ def time_to_str(t, mode="min"):
         raise NotImplementedError
 
 
+def get_all_vars(cls):
+    dicts = {}
+    for c in cls.__bases__:
+        dicts.update(get_all_vars(c))
+    dicts.update(cls.__dict__)
+    return dicts
+
+
 class ArcFaceLoss(nn.modules.Module):
     def __init__(self, s=30.0, m=0.5):
         super(ArcFaceLoss, self).__init__()

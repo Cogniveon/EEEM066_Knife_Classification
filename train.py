@@ -1,12 +1,10 @@
 import argparse
 import os
-import signal
 import warnings
 from datetime import datetime
 from timeit import default_timer as timer
 
 import pandas as pd
-import timm
 import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
@@ -17,34 +15,24 @@ from data import knifeDataset
 from utils import AverageMeter, Logger, get_learning_rate, time_to_str
 
 log = Logger()
-should_exit = False
 
 
-def init_logging(config):
-    if not os.path.exists("./logs/"):
-        os.mkdir("./logs/")
-    log.open("logs/%s_log_train.txt" % (datetime.now().strftime("%Y-%m-%d_%H:%M:%S")))
+def init_logging(output_path, config):
+    log.open(f"{output_path}/log.txt")
     log.write(
         "\n----------------------------------------------- [START %s] %s\n\n"
         % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "-" * 51)
     )
-    log.write("Using config values:\n")
-    log.write("-" * 100)
 
-    for k, v in config.__class__.__dict__.items():
-        if not k.startswith("__"):
-            log.write(f"{k}: {v}\n")
+    log.write("Using config values:\n\n")
+    for key in config.__dict__:
+        if not key.startswith("__") and key != "base_model":
+            log.write(f"{key}: {getattr(config, key)}\n")
+    log.write("-" * 127 + "\n")
 
     log.write("                           |----- Train -----|----- Valid----|---------|\n")
     log.write("mode     iter     epoch    |       loss      |        mAP    | time    |\n")
     log.write("-------------------------------------------------------------------------------------------\n")
-
-
-# Define a signal handler for the interrupt signal (Ctrl+C)
-def interrupt_handler(signum, frame):
-    # print(f"\nInterrupt signal received. {signum} , {frame} ; Exiting...")
-    global should_exit
-    should_exit = True
 
 
 def train_model(model, loader, loss_fn, scaler, optimizer, epoch, validation_accuracy, start):
@@ -55,15 +43,28 @@ def train_model(model, loader, loss_fn, scaler, optimizer, epoch, validation_acc
         img = images.cuda(non_blocking=True)
         label = target.cuda(non_blocking=True)
 
+        optimizer.zero_grad()
+
         with torch.cuda.amp.autocast():
             logits = model(img)
-        loss = loss_fn(logits, label)
+            loss = loss_fn(logits, label)
+
         losses.update(loss.item(), images.size(0))
+
         scaler.scale(loss).backward()
+
+        # Unscales the gradients of optimizer's assigned params in-place
+        scaler.unscale_(optimizer)
+
+        # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
+
+        # optimizer's gradients are already unscaled, so scaler.step does not unscale them,
+        # although it still skips optimizer.step() if the gradients contain infs or NaNs.
         scaler.step(optimizer)
+
+        # Updates the scale for next iteration.
         scaler.update()
-        optimizer.zero_grad()
-        scheduler.step()
 
         print("\r", end="", flush=True)
         message = "%s %5.1f %6.1f        |      %0.3f     |      %0.3f     | %s" % (
@@ -82,7 +83,7 @@ def train_model(model, loader, loss_fn, scaler, optimizer, epoch, validation_acc
     return [losses.avg]
 
 
-def evaluate_model(model, val_loader, loss_fn, epoch, train_loss, start):
+def evaluate_model(model, val_loader, epoch, train_loss, start):
     model.cuda()
     model.eval()
     model.training = False
@@ -135,7 +136,6 @@ def map_accuracy(probs, truth, k=5):
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
-    signal.signal(signal.SIGINT, interrupt_handler)
 
     parser = argparse.ArgumentParser(description="EEEM066 Knife classification coursework model trainer")
 
@@ -150,7 +150,11 @@ if __name__ == "__main__":
 
     # log.write(f"Training model using config: {args.config}")
     config = getattr(config, args.config)
-    init_logging(config)
+
+    output_path = f"./results/{config.model_name}/{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    init_logging(output_path, config)
 
     train_loader = DataLoader(
         knifeDataset(pd.read_csv("dataset/train.csv"), config, mode="train"),
@@ -168,34 +172,41 @@ if __name__ == "__main__":
         num_workers=os.cpu_count(),
     )
 
-    model = timm.create_model(config.base_model, pretrained=True, num_classes=config.n_classes)
+    model = config.base_model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
-    scheduler = lr_scheduler.CosineAnnealingLR(
-        optimizer=optimizer,
-        T_max=config.epochs * len(train_loader),
-        eta_min=0,
-        last_epoch=-1,
-    )
-    criterion = nn.CrossEntropyLoss().cuda()
+    # optimizer = optim.SGD(model.parameters(), lr=config.learning_rate, momentum=0.9)
+
+    # scheduler = lr_scheduler.CosineAnnealingLR(
+    #     optimizer=optimizer,
+    #     T_max=config.epochs * len(train_loader),
+    #     eta_min=0,
+    #     last_epoch=-1,
+    # )
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+
+    # criterion = nn.BCEWithLogitsLoss(torch.ones([config.n_classes])).to(device)
+    # criterion = nn.SmoothL1Loss().to(device)
+    criterion = nn.CrossEntropyLoss()
+
+    # torch.autograd.set_detect_anomaly(True)
     scaler = torch.cuda.amp.GradScaler()
 
     validation_metrics = [0]
 
     start = timer()
     for epoch in range(0, config.epochs):
-        if should_exit:
-            break
-
         lr = get_learning_rate(optimizer)
 
         training_metrics = train_model(
             model, train_loader, criterion, scaler, optimizer, epoch, validation_metrics, start
         )
 
-        validation_metrics = evaluate_model(model, val_loader, criterion, epoch, training_metrics, start)
+        validation_metrics = evaluate_model(model, val_loader, epoch, training_metrics, start)
 
-        filename = f"Knife-{config.base_model}-E" + str(epoch + 1) + ".pt"
+        scheduler.step()
+
+        filename = f"{output_path}/Knife-{config.model_name}-E" + str(epoch + 1) + ".pt"
         torch.save(model.state_dict(), filename)
