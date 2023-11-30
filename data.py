@@ -26,7 +26,7 @@ class knifeDataset(Dataset):
             X = T.Compose(
                 [
                     T.ToPILImage(),
-                    T.Resize((self.config.img_weight, self.config.img_height)),
+                    T.Resize((self.config.img_width, self.config.img_height)),
                     T.ColorJitter(brightness=0.2, contrast=0, saturation=0, hue=0),
                     T.RandomRotation(degrees=(0, 180)),
                     T.RandomVerticalFlip(p=0.5),
@@ -39,7 +39,7 @@ class knifeDataset(Dataset):
             X = T.Compose(
                 [
                     T.ToPILImage(),
-                    T.Resize((self.config.img_weight, self.config.img_height)),
+                    T.Resize((self.config.img_width, self.config.img_height)),
                     T.ToTensor(),
                     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ]

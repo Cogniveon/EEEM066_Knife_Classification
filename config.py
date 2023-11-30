@@ -1,5 +1,5 @@
 import timm
-from torch import nn
+from torch import nn, optim
 from torchvision import models
 from torchvision.models.alexnet import AlexNet_Weights
 from torchvision.models.densenet import DenseNet121_Weights
@@ -18,14 +18,13 @@ class BaseConfig(object):
     def __init__(self) -> None:
         ## number of classes
         self.n_classes = 192
-        # tf_efficientnet_b0, resnet50, densenet121, vgg16_bn
         self.model_name = "tf_efficientnet_b0"
         self.base_model = timm.create_model(self.model_name, pretrained=True, num_classes=self.n_classes)
-        self.img_weight = 224
+        self.img_width = 224
         self.img_height = 224
         self.batch_size = 16
         self.epochs = 20
-        self.learning_rate = 0.0005
+        self.learning_rate = 0.005
 
 
 class AlexnetConfig(BaseConfig):
@@ -71,27 +70,27 @@ class ResnetConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
         self.model_name = "resnet18"
+
         resnet_pretrained = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
 
-        # Create a new ResNet model and load the pre-trained weights
-        self.base_model = nn.Sequential(
-            resnet_pretrained.conv1,
-            resnet_pretrained.bn1,
-            resnet_pretrained.relu,
-            resnet_pretrained.maxpool,
-            resnet_pretrained.layer1,
-            resnet_pretrained.layer2,
-            resnet_pretrained.layer3,
-            resnet_pretrained.layer4,
-            resnet_pretrained.avgpool,
-            nn.Flatten(),
-            nn.Linear(resnet_pretrained.fc.in_features, self.n_classes),
+        sequential_layers = nn.Sequential(
+            nn.Linear(resnet_pretrained.fc.in_features, 2048),
+            nn.BatchNorm1d(2048),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(2048, 2048),
+            nn.BatchNorm1d(2048),
+            nn.ReLU(),
+            nn.Linear(2048, self.n_classes),
+            # nn.LogSoftmax(dim=1),
         )
 
-        for param in self.base_model.parameters():
+        resnet_pretrained.fc = sequential_layers
+        for param in resnet_pretrained.fc.parameters():
             param.requires_grad = True
 
-        self.learning_rate = 0.0001
+        self.base_model = resnet_pretrained
+        self.learning_rate = 0.001
 
 
 class ShuffleNetConfig(BaseConfig):
@@ -100,7 +99,7 @@ class ShuffleNetConfig(BaseConfig):
         self.model_name = "shufflenet_v2_x1_0"
         self.base_model = models.shufflenet_v2_x1_0(weights=ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1)
         self.base_model.fc = nn.Linear(self.base_model.fc.in_features, self.n_classes)
-        self.learning_rate = 0.0001
+        self.learning_rate = 0.005
 
 
 class ShuffleNet2xConfig(BaseConfig):
@@ -109,7 +108,7 @@ class ShuffleNet2xConfig(BaseConfig):
         self.model_name = "shufflenet_v2_x2_0"
         self.base_model = models.shufflenet_v2_x2_0(weights=ShuffleNet_V2_X2_0_Weights.IMAGENET1K_V1)
         self.base_model.fc = nn.Linear(self.base_model.fc.in_features, self.n_classes)
-        self.learning_rate = 0.00005
+        self.learning_rate = 0.0005
         self.epochs = 20
 
 
@@ -162,7 +161,7 @@ class GooglenetConfig(BaseConfig):
         for param in self.base_model.parameters():
             param.requires_grad = True
 
-        self.batch_size = 16
+        self.batch_size = 3
         self.learning_rate = 0.005
 
 
@@ -190,9 +189,10 @@ class VGGConfig(BaseConfig):
 
 
 default = BaseConfig()
-efficientb0 = BaseConfig()
-efficientb5 = EfficientB5Config()
+efficientnetb0 = BaseConfig()
+efficientnetb5 = EfficientB5Config()
 alexnet = AlexnetConfig()
+googlenet = GooglenetConfig()
 resnet = ResnetConfig()
 densenet = DensenetConfig()
 shufflenet = ShuffleNetConfig()
