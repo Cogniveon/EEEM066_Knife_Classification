@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from timeit import default_timer as timer
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -16,10 +17,12 @@ from utils import AverageMeter, Logger, time_to_str
 
 
 class KnifeDataset(Dataset):
-    def __init__(self, images_df, mode="train"):
-        self.images_df = images_df.copy()
-        self.images_df.Id = self.images_df.Id
+    def __init__(self, parquet_path, mode="train"):
+        self.parquet_path = parquet_path
         self.mode = mode
+
+        # Load metadata from Parquet file
+        self.images_df = pd.read_parquet(self.parquet_path)
 
     def __len__(self):
         return len(self.images_df)
@@ -134,14 +137,14 @@ def map_accuracy(probs, truth, k=5):
         return map5, acc1, acc5
 
 
-batch_size = 10
-learning_rate = 0.001
+batch_size = 8
+learning_rate = 0.01
 num_epochs = 10
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 train_loader = DataLoader(
-    KnifeDataset(pd.read_csv("dataset/train.csv")),
+    KnifeDataset("dataset/train.parquet"),
     batch_size=batch_size,
     shuffle=True,
     pin_memory=True,
@@ -149,9 +152,9 @@ train_loader = DataLoader(
 )
 
 val_loader = DataLoader(
-    KnifeDataset(pd.read_csv("dataset/val.csv"), mode="val"),
+    KnifeDataset("dataset/val.parquet", mode="val"),
     batch_size=batch_size,
-    shuffle=True,
+    shuffle=False,
     pin_memory=True,
     num_workers=os.cpu_count(),
 )
@@ -159,7 +162,13 @@ val_loader = DataLoader(
 
 model = CustomCNN(num_classes=192).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.5)  # Adjust parameters as needed
+scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    optimizer=optimizer,
+    T_max=num_epochs * len(train_loader),
+    eta_min=0,
+    last_epoch=-1,
+)
+# scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.5)  # Adjust parameters as needed
 criterion = nn.CrossEntropyLoss().to(device)
 # criterion = FocalLoss(alpha=0.75, gamma=2, reduction="mean").to(device)
 
@@ -200,7 +209,7 @@ log.write("mode     iter     epoch    |       loss      |        mAP    |      a
 log.write("-" * 120 + "\n")
 
 
-validation_accuracy = [[0, 0, 0]]
+validation_accuracy = [[torch.tensor(0), torch.tensor(0), torch.tensor(0)]]
 start = timer()
 
 for epoch in range(num_epochs):
@@ -288,4 +297,10 @@ for epoch in range(num_epochs):
     filename = f"{output_path}/Knife-customcnn-E" + str(epoch + 1) + ".pt"
     torch.save(model.state_dict(), filename)
 
-print(f"mAP = [{' '.join([mAP for mAP, _, _ in enumerate(validation_accuracy)])}]")
+
+mAP_values = ["%0.3f" % (mAP.item()) for i, (mAP, _, _) in enumerate(validation_accuracy)]
+print(f"\n\nmAP = [{' '.join(mAP_values)}];")
+
+best_epoch, best_mAP = max([(i, mAP.item()) for i, (mAP, _, _) in enumerate(validation_accuracy)], key=lambda x: x[1])
+
+print(f"\nbest mAP = {best_mAP} at epoch {best_epoch + 1}")
