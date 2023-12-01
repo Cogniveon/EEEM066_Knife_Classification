@@ -25,6 +25,7 @@ class BaseConfig(object):
         self.batch_size = 16
         self.epochs = 20
         self.learning_rate = 0.005
+        self.weight_decay = 0.001
 
 
 class AlexnetConfig(BaseConfig):

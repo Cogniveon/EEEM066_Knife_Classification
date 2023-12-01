@@ -1,0 +1,49 @@
+
+---------------------------------------- [START 2023-12-01 03:47:31] ---------------------------------------------------
+
+Using config values:
+
+n_classes: 192
+model_name: customcnn
+CustomCNN(
+  (conv1): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+  (conv1_bn): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+  (relu1): ReLU()
+  (pool1): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+  (flatten): Flatten(start_dim=1, end_dim=-1)
+  (fc2): Linear(in_features=802816, out_features=192, bias=True)
+)
+img_width: 224
+img_height: 224
+batch_size: 8
+epochs: 10
+learning_rate: 0.0001
+device: cuda:0
+lr_scheduler: CosineAnnealingLR
+loss_fn: CrossEntropyLoss
+optimizer: Adam
+------------------------------------------------------------------------------------------------------------------------
+                           |----- Train -----|----- Valid----|---------------|---------------|----------|
+mode     iter     epoch    |       loss      |        mAP    |      acc@1    |      acc@5    | time     |
+------------------------------------------------------------------------------------------------------------------------
+
+train   1202.0    0.0       |      65.209     |     0.000    |     0.000    |     0.000    |  0 hr 05 min
+val      49.0    0.0       |      65.209     |     0.450    |     0.405    |     0.525    |  0 hr 05 min
+train   1202.0    1.0       |      19.124     |     0.450    |     0.405    |     0.525    |  0 hr 10 min
+val      49.0    1.0       |      19.124     |     0.576    |     0.535    |     0.650    |  0 hr 10 min
+train   1202.0    2.0       |      8.350     |     0.576    |     0.535    |     0.650    |  0 hr 15 min
+val      49.0    2.0       |      8.350     |     0.605    |     0.570    |     0.660    |  0 hr 15 min
+train   1202.0    3.0       |      4.145     |     0.605    |     0.570    |     0.660    |  0 hr 20 min
+val      49.0    3.0       |      4.145     |     0.639    |     0.618    |     0.678    |  0 hr 20 min
+train   1202.0    4.0       |      2.791     |     0.639    |     0.618    |     0.678    |  0 hr 25 min
+val      49.0    4.0       |      2.791     |     0.647    |     0.625    |     0.685    |  0 hr 25 min
+train   1202.0    5.0       |      2.167     |     0.647    |     0.625    |     0.685    |  0 hr 30 min
+val      49.0    5.0       |      2.167     |     0.649    |     0.625    |     0.690    |  0 hr 30 min
+train   1202.0    6.0       |      1.380     |     0.649    |     0.625    |     0.690    |  0 hr 35 min
+val      49.0    6.0       |      1.380     |     0.665    |     0.652    |     0.688    |  0 hr 35 min
+train   1202.0    7.0       |      1.068     |     0.665    |     0.652    |     0.688    |  0 hr 40 min
+val      49.0    7.0       |      1.068     |     0.663    |     0.645    |     0.692    |  0 hr 40 min
+train   1202.0    8.0       |      0.928     |     0.663    |     0.645    |     0.692    |  0 hr 45 min
+val      49.0    8.0       |      0.928     |     0.647    |     0.625    |     0.680    |  0 hr 45 min
+train   1202.0    9.0       |      0.750     |     0.647    |     0.625    |     0.680    |  0 hr 50 min
+val      49.0    9.0       |      0.750     |     0.665    |     0.647    |     0.700    |  0 hr 50 min

@@ -34,6 +34,10 @@ class KnifeDataset(Dataset):
             X = T.Compose(
                 [
                     T.Resize((224, 224)),
+                    T.ColorJitter(brightness=0.2, contrast=0, saturation=0, hue=0),
+                    # T.RandomRotation(degrees=(0, 30)),
+                    T.RandomVerticalFlip(p=0.5),
+                    T.RandomHorizontalFlip(p=0.5),
                     T.ToTensor(),
                     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ]
@@ -137,9 +141,10 @@ def map_accuracy(probs, truth, k=5):
         return map5, acc1, acc5
 
 
-batch_size = 8
-learning_rate = 0.01
-num_epochs = 10
+batch_size = 12
+learning_rate = 0.001
+weight_decay = 0.00001
+num_epochs = 30
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -161,14 +166,18 @@ val_loader = DataLoader(
 
 
 model = CustomCNN(num_classes=192).to(device)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(
-    optimizer=optimizer,
-    T_max=num_epochs * len(train_loader),
-    eta_min=0,
-    last_epoch=-1,
-)
-# scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.5)  # Adjust parameters as needed
+
+# optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+# optimizer = optim.RMSprop(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+
+# scheduler = optim.lr_scheduler.CosineAnnealingLR(
+#     optimizer=optimizer,
+#     T_max=num_epochs * len(train_loader),
+#     eta_min=0,
+#     last_epoch=-1,
+# )
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)  # Adjust parameters as needed
 criterion = nn.CrossEntropyLoss().to(device)
 # criterion = FocalLoss(alpha=0.75, gamma=2, reduction="mean").to(device)
 
@@ -198,6 +207,7 @@ log.write(f"img_height: 224\n")
 log.write(f"batch_size: {batch_size}\n")
 log.write(f"epochs: {num_epochs}\n")
 log.write(f"learning_rate: {learning_rate}\n")
+log.write(f"weight_decay: {weight_decay}\n")
 log.write(f"device: {device}\n")
 log.write(f"lr_scheduler: {scheduler.__class__.__name__}\n")
 log.write(f"loss_fn: {criterion.__class__.__name__}\n")
@@ -229,6 +239,7 @@ for epoch in range(num_epochs):
 
         del images, labels, outputs
         torch.cuda.empty_cache()
+
         losses.update(loss.item(), imgs.size(0))
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
@@ -303,4 +314,4 @@ print(f"\n\nmAP = [{' '.join(mAP_values)}];")
 
 best_epoch, best_mAP = max([(i, mAP.item()) for i, (mAP, _, _) in enumerate(validation_accuracy)], key=lambda x: x[1])
 
-print(f"\nbest mAP = {best_mAP} at epoch {best_epoch + 1}")
+print(f"\nbest mAP = {best_mAP} at epoch {best_epoch}")

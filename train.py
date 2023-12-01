@@ -1,19 +1,16 @@
 import argparse
-import math
 import os
 import warnings
 from datetime import datetime
 from timeit import default_timer as timer
 
-import numpy as np
-import pandas as pd
 import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 import config
-from data import knifeDataset
+from data import KnifeDataset
 from utils import (
     ArcFaceLoss,
     AverageMeter,
@@ -29,7 +26,7 @@ log = Logger()
 def init_logging(output_path, config):
     log.open(f"{output_path}/log.txt")
     log.write(
-        "\n----------------------------------------------- [START %s] %s\n\n"
+        "\n---------------------------------------- [START %s] %s\n\n"
         % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "-" * 51)
     )
 
@@ -38,11 +35,15 @@ def init_logging(output_path, config):
         if not key.startswith("__") and key != "base_model":
             log.write(f"{key}: {getattr(config, key)}\n")
 
-    log.write("-" * 127 + "\n")
+    log.write("-" * 120 + "\n")
 
-    log.write("                           |----- Train -----|----- Valid----|---------|\n")
-    log.write("mode     iter     epoch    |       loss      |        mAP    | time    |\n")
-    log.write("-------------------------------------------------------------------------------------------\n")
+    log.write(
+        "                           |----- Train -----|----- Valid----|---------------|---------------|----------|\n"
+    )
+    log.write(
+        "mode     iter     epoch    |       loss      |        mAP    |      acc@1    |      acc@5    | time     |\n"
+    )
+    log.write("-" * 120 + "\n")
 
 
 def train_model(model, loader, loss_fn, scaler, optimizer, epoch, validation_accuracy, start):
@@ -67,12 +68,15 @@ def train_model(model, loader, loss_fn, scaler, optimizer, epoch, validation_acc
         scaler.update()
 
         print("\r", end="", flush=True)
-        message = "%s %5.1f %6.1f        |      %0.3f     |      %0.3f     | %s" % (
+        [last_map, last_acc1, last_acc5] = validation_accuracy
+        message = "%s   %5.1f %6.1f       |      %0.3f     |     %0.3f    |     %0.3f    |     %0.3f    | %s" % (
             "train",
             i,
             epoch,
             losses.avg,
-            validation_accuracy[0],
+            last_map,
+            last_acc1,
+            last_acc5,
             time_to_str((timer() - start), "min"),
         )
         print(message, end="", flush=True)
@@ -87,6 +91,8 @@ def evaluate_model(model, val_loader, epoch, train_loss, start):
     model.eval()
     model.training = False
     map = AverageMeter()
+    acc1 = AverageMeter()
+    acc5 = AverageMeter()
     with torch.no_grad():
         for i, (images, target, fnames) in enumerate(val_loader):
             img = images.cuda(non_blocking=True)
@@ -98,19 +104,23 @@ def evaluate_model(model, val_loader, epoch, train_loss, start):
 
             valid_map5, valid_acc1, valid_acc5 = map_accuracy(preds, label)
             map.update(valid_map5, img.size(0))
+            acc1.update(valid_acc1, img.size(0))
+            acc5.update(valid_acc5, img.size(0))
             print("\r", end="", flush=True)
-            message = "%s %5.1f %6.1f       |      %0.3f     |      %0.3f    | %s" % (
+            message = "%s   %5.1f %6.1f       |      %0.3f     |     %0.3f    |     %0.3f    |     %0.3f    | %s" % (
                 "val  ",
                 i,
                 epoch,
                 train_loss[0],
                 map.avg,
+                acc1.avg,
+                acc5.avg,
                 time_to_str((timer() - start), "min"),
             )
             print(message, end="", flush=True)
         log.write("\n")
         log.write(message)
-    return [map.avg]
+    return [map.avg, acc1.avg, acc5.avg]
 
 
 ## Computing the mean average precision, accuracy
@@ -155,7 +165,7 @@ if __name__ == "__main__":
         os.makedirs(output_path)
 
     train_loader = DataLoader(
-        knifeDataset(pd.read_csv("dataset/train.csv"), config, mode="train"),
+        KnifeDataset("dataset/train.parquet", config, mode="train"),
         batch_size=config.batch_size,
         shuffle=True,
         pin_memory=True,
@@ -163,7 +173,7 @@ if __name__ == "__main__":
     )
 
     val_loader = DataLoader(
-        knifeDataset(pd.read_csv("dataset/val.csv"), config, mode="val"),
+        KnifeDataset("dataset/val.parquet", config, mode="val"),
         batch_size=config.batch_size,
         shuffle=False,
         pin_memory=True,
@@ -175,7 +185,7 @@ if __name__ == "__main__":
     model = config.base_model
     model.to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     # optimizer = optim.RMSprop(model.parameters(), lr=config.learning_rate)
     # optimizer = optim.SGD(model.parameters(), lr=config.learning_rate, momentum=0.9)
 
@@ -196,7 +206,7 @@ if __name__ == "__main__":
     # torch.autograd.set_detect_anomaly(True)
     scaler = torch.cuda.amp.GradScaler()
 
-    validation_metrics = [0]
+    validation_metrics = [torch.tensor(0), torch.tensor(0), torch.tensor(0)]
 
     config.device = device
     config.lr_scheduler = scheduler.__class__.__name__
